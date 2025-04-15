@@ -1,35 +1,99 @@
-html {
-  height: 100%;
+/* General Body Styles */
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 20px;
+  background-color: #f4f4f9;
+}
+
+/* Container for the app */
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+/* Login Section Styles */
+#login-section {
+  text-align: center;
+  margin-top: 50px;
+}
+
+/* Input Styles for Login Form */
+#login-form input {
+  padding: 10px;
+  margin: 5px;
+  width: 200px;
+}
+
+/* Button Styles */
+button {
+  padding: 10px 15px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  cursor: pointer;
+  border-radius: 5px; /* Added border-radius for consistency */
+}
+
+button:hover {
+  background-color: #0056b3;
+}
+
+/* Main App Styles */
+#app {
+  margin-top: 20px;
+}
+
+/* Search Box Styles */
+.search-box {
+  margin: 20px 0;
+}
+
+/* Search Input Styles */
+#search-input {
+  padding: 10px;
+  width: 70%;
+}
+
+/* Results Section Styles */
+#results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+/* Movie Card Styles */
+.movie-card {
+  background: white;
+  border-radius: 8px;
+  padding: 10px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.movie-card img {
   width: 100%;
-  body {
-    /* background-color: #76a9e0; */
-    background-image: url("https://cdn.pixabay.com/photo/2015/11/19/21/10/glasses-1052010_640.jpg");
-    background-color: #017199;
-    /* Full height */
-    height: 100%;
-    /* Center and scale the image nicely */
-    background-position: center;
-    background-repeat: no-repeat;
-    background-size: cover;
-  }
+  border-radius: 5px;
+}
 
-  .center {
-    margin: auto;
-    margin-top: 200px;
-  }
+.movie-card h3 {
+  margin: 10px 0 5px;
+}
 
-  #header {
-    font-family: 'Righteous', sans-serif;
-    font-size: 3rem;
-  }
+/* Bookmark Button Styles */
+.bookmark-btn {
+  background-color: #28a745;
+  color: white; /* Ensure text is visible */
+}
 
-  h2 {
-    font-family: 'Righteous', sans-serif;
-  }
+.bookmark-btn:hover {
+  background-color: #218838;
+}
 
-  .book-list {
-    margin-top: 50px;
-    visibility: hidden;
-  }
-
+/* Bookmarks List Styles */
+#bookmarks-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
 }
