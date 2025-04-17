@@ -113,10 +113,11 @@ function displayMovies(movies) {
   });
 
   // Add bookmark event listeners
-  document.querySelectorAll(".bookmark-btn").forEach((btn) => {
+  document.querySelectorAll(".bookmark-btn").forEach(btn => {
     btn.addEventListener("click", (e) => {
+      e.stopPropagation();
       const movieId = e.target.getAttribute("data-id");
-      const movie = movies.find((m) => m.imdbID === movieId);
+      const movie = movies.find(m => m.imdbID === movieId);
       addBookmark(movie);
     });
   });
@@ -126,12 +127,13 @@ function displayMovies(movies) {
 function addBookmark(movie) {
   let bookmarks = JSON.parse(localStorage.getItem("bookmarks")) || [];
   if (!bookmarks.some(m => m.imdbID === movie.imdbID)) {
+    movie.justAdded = true; // Flag for animation
     bookmarks.push(movie);
     localStorage.setItem("bookmarks", JSON.stringify(bookmarks));
-    alert(`✅ ${movie.Title} bookmarked!`);
+    showToast(`✓ ${movie.Title} bookmarked!`, 'success');
     loadBookmarks();
   } else {
-    alert("⚠️ Already bookmarked!");
+    showToast(`⚠ Already bookmarked!`, 'warning');
   }
 }
 
@@ -139,17 +141,26 @@ function loadBookmarks() {
   const bookmarks = JSON.parse(localStorage.getItem("bookmarks")) || [];
   
   bookmarksList.innerHTML = bookmarks
-    .map(
-      (movie) => `
-      <div class="movie-card" data-id="${movie.imdbID}">
+    .map(movie => `
+      <div class="movie-card ${movie.justAdded ? 'new-bookmark' : ''}" data-id="${movie.imdbID}">
         <img src="${movie.Poster !== "N/A" ? movie.Poster : "https://via.placeholder.com/200x300?text=No+Poster"}" alt="${movie.Title}">
         <h3>${movie.Title}</h3>
         <p>Year: ${movie.Year}</p>
         <button class="remove-btn" data-id="${movie.imdbID}">Remove</button>
       </div>
-    `
-    )
-    .join("");
+    `)
+    .join('');
+
+  // Remove animation class after it plays
+  setTimeout(() => {
+    document.querySelectorAll('.new-bookmark').forEach(el => {
+      el.classList.remove('new-bookmark');
+    });
+    
+    // Clear the justAdded flags
+    const updatedBookmarks = bookmarks.map(m => ({ ...m, justAdded: false }));
+    localStorage.setItem("bookmarks", JSON.stringify(updatedBookmarks));
+  }, 500);
 
   // Make bookmarked movies clickable
   document.querySelectorAll("#bookmarks-list .movie-card").forEach(card => {
@@ -174,9 +185,11 @@ function loadBookmarks() {
 // Remove Bookmark Function
 function removeBookmark(imdbID) {
   let bookmarks = JSON.parse(localStorage.getItem("bookmarks")) || [];
-  bookmarks = bookmarks.filter(movie => movie.imdbID !== imdbID);
+  const movie = bookmarks.find(m => m.imdbID === imdbID);
+  bookmarks = bookmarks.filter(m => m.imdbID !== imdbID);
   localStorage.setItem("bookmarks", JSON.stringify(bookmarks));
-  loadBookmarks(); // Refresh the display
+  showToast(`🗑 ${movie.Title} removed`, 'error');
+  loadBookmarks();
 }
 
 // Close modal when clicking X
@@ -190,3 +203,14 @@ window.addEventListener("click", (e) => {
     movieModal.style.display = "none";
   }
 });
+
+// Toast notification function
+function showToast(message, type = 'success') {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.className = 'toast show ' + type;
+  
+  setTimeout(() => {
+    toast.classList.remove('show');
+  }, 3000); // Auto-hide after 3 seconds
+}
