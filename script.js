@@ -1,4 +1,4 @@
-const API_KEY = "f22df8ad"; // Integrated OMDB API key
+const API_KEY = "f22df8ad";
 
 // DOM Elements
 const loginSection = document.getElementById("login-section");
@@ -13,35 +13,86 @@ const userDisplay = document.getElementById("user-display");
 const movieModal = document.getElementById("movie-modal");
 const modalDetails = document.getElementById("modal-movie-details");
 const closeModal = document.querySelector(".close-modal");
+const genreList = document.querySelectorAll("#genre-list li");
+const genreButtons = document.querySelectorAll(".genre-btn");
 
-// Function to show movie details
-async function showMovieDetails(imdbID) {
-  try {
-    const response = await fetch(`https://www.omdbapi.com/?i=${imdbID}&apikey=${API_KEY}`);
-    const movie = await response.json();
-    
-    modalDetails.innerHTML = `
-      <div class="movie-details">
-        <img src="${movie.Poster !== "N/A" ? movie.Poster : "https://via.placeholder.com/300x450?text=No+Poster"}" alt="${movie.Title}">
-        <div>
-          <h2>${movie.Title} (${movie.Year})</h2>
-          <p><strong>Director:</strong> ${movie.Director}</p>
-          <p><strong>Actors:</strong> ${movie.Actors}</p>
-          <p><strong>Plot:</strong> ${movie.Plot}</p>
-          <p><strong>Rating:</strong> ${movie.imdbRating}/10 (${movie.imdbVotes} votes)</p>
-        </div>
-      </div>
-    `;
-    
-    movieModal.style.display = "block";
-  } catch (error) {
-    console.error("Error fetching movie details:", error);
-    modalDetails.innerHTML = "<p>Failed to load movie details.</p>";
+// Extended genre mapping with multiple keywords
+const GENRE_MAPPING = {
+  action: ["action", "adventure", "superhero", "martial arts"],
+  comedy: ["comedy", "funny", "humor", "satire"],
+  drama: ["drama", "romance", "emotional", "period"],
+  horror: ["horror", "scary", "thriller", "psychological"],
+  "sci-fi": ["sci-fi", "science fiction", "space", "future", "dystopian"],
+  animation: ["animation", "animated", "cartoon", "anime"]
+};
+
+// Caches
+let genreCache = JSON.parse(localStorage.getItem("genreCache")) || {};
+let searchCache = JSON.parse(localStorage.getItem("searchCache")) || {};
+let bookmarkCache = JSON.parse(localStorage.getItem("bookmarks")) || [];
+
+// Initialize the app
+document.addEventListener("DOMContentLoaded", initApp);
+
+function initApp() {
+  setupEventListeners();
+  clearStaleCache();
+  
+  // Check if user is already logged in
+  const loggedInUser = localStorage.getItem("loggedInUser");
+  if (loggedInUser) {
+    loginSection.style.display = "none";
+    appSection.style.display = "block";
+    userDisplay.textContent = loggedInUser;
+    loadBookmarks();
   }
 }
 
-// Login Event Listener
-loginForm.addEventListener("submit", (e) => {
+function setupEventListeners() {
+  // Login
+  loginForm.addEventListener("submit", handleLogin);
+  
+  // Logout
+  logoutBtn.addEventListener("click", handleLogout);
+  
+  // Search
+  searchBtn.addEventListener("click", searchMovies);
+  searchInput.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") searchMovies();
+  });
+  
+  // Genre navigation
+  genreList.forEach(item => {
+    item.addEventListener("click", () => loadGenreMovies(item.dataset.genre));
+  });
+  
+  // Genre quick filters
+  genreButtons.forEach(btn => {
+    btn.addEventListener("click", () => {
+      // Highlight active genre
+      genreButtons.forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      loadGenreMovies(btn.dataset.genre);
+    });
+  });
+  
+  // Modal
+  closeModal.addEventListener("click", () => movieModal.style.display = "none");
+  window.addEventListener("click", (e) => {
+    if (e.target === movieModal) movieModal.style.display = "none";
+  });
+
+// Bookmark Sidebar Button
+document.getElementById('bookmarks-nav-btn').addEventListener('click', () => {
+  document.getElementById('bookmarks').scrollIntoView({
+    behavior: 'smooth'
+  });
+});
+
+}
+
+// Authentication Functions
+function handleLogin(e) {
   e.preventDefault();
   const username = document.getElementById("username").value;
   const password = document.getElementById("password").value;
@@ -50,167 +101,319 @@ loginForm.addEventListener("submit", (e) => {
     loginSection.style.display = "none";
     appSection.style.display = "block";
     userDisplay.textContent = username;
+    localStorage.setItem("loggedInUser", username);
     loadBookmarks();
+    showToast("Login successful!", "success");
   } else {
-    alert("Invalid credentials! Use username: bob, password: bobpass");
-  }
-});
-
-// Logout Functionality
-logoutBtn.addEventListener("click", () => {
-  loginSection.style.display = "block";
-  appSection.style.display = "none";
-  loginForm.reset();
-});
-
-// Search Movies Function
-searchBtn.addEventListener("click", searchMovies);
-
-async function searchMovies() {
-  const query = searchInput.value.trim();
-  if (!query) return;
-
-  try {
-    const response = await fetch(
-      `https://www.omdbapi.com/?s=${query}&apikey=${API_KEY}`
-    );
-    const data = await response.json();
-
-    if (data.Response === "True") {
-      displayMovies(data.Search);
-    } else {
-      resultsDiv.innerHTML = `<p>No movies found for "${query}"</p>`;
-    }
-  } catch (error) {
-    console.error("Error fetching movies:", error);
-    resultsDiv.innerHTML = `<p>Error loading movies. Please try again.</p>`;
+    showToast("Invalid credentials! Use: bob/bobpass", "error");
   }
 }
 
-// Display Movies Function
-function displayMovies(movies) {
-  resultsDiv.innerHTML = movies
-    .map(
-      (movie) => `
-      <div class="movie-card" data-id="${movie.imdbID}">
-        <img src="${movie.Poster !== "N/A" ? movie.Poster : "https://via.placeholder.com/200x300?text=No+Poster"}" alt="${movie.Title}">
-        <h3>${movie.Title}</h3>
-        <p>Year: ${movie.Year}</p>
-        <button class="bookmark-btn" data-id="${movie.imdbID}">Bookmark</button>
-      </div>
-    `
-    )
-    .join("");
+function handleLogout() {
+  loginSection.style.display = "block";
+  appSection.style.display = "none";
+  loginForm.reset();
+  localStorage.removeItem("loggedInUser");
+  showToast("Logged out successfully", "success");
+}
 
-  // Make movie cards clickable (NEW)
+// Movie Search Functions
+async function searchMovies() {
+  const query = searchInput.value.trim();
+  if (!query) {
+    showToast("Please enter a search term", "warning");
+    return;
+  }
+
+  // Check cache first
+  if (searchCache[query]) {
+    displayMovies(searchCache[query]);
+    showToast(`Showing cached results for "${query}"`, "info");
+    return;
+  }
+
+  showToast(`Searching for "${query}"...`, "info");
+  resultsDiv.innerHTML = '<div class="loading-spinner"></div>';
+
+  try {
+    const response = await fetch(`https://www.omdbapi.com/?s=${query}&apikey=${API_KEY}`);
+    const data = await response.json();
+
+    if (data.Response === "True") {
+      // Get detailed info for each movie
+      const detailedMovies = await getDetailedMovies(data.Search);
+      
+      // Cache results
+      searchCache[query] = detailedMovies;
+      localStorage.setItem("searchCache", JSON.stringify(searchCache));
+      
+      displayMovies(detailedMovies);
+      showToast(`Found ${detailedMovies.length} movies for "${query}"`, "success");
+    } else {
+      resultsDiv.innerHTML = `<p class="error-message">No results for "${query}"</p>`;
+      showToast(`No movies found for "${query}"`, "warning");
+    }
+  } catch (error) {
+    console.error("Search error:", error);
+    resultsDiv.innerHTML = `<p class="error-message">Search failed. Please try again.</p>`;
+    showToast("Search failed. Please try again.", "error");
+  }
+}
+
+// Genre Functions
+async function loadGenreMovies(genre) {
+  // Check cache first
+  if (genreCache[genre]) {
+    displayMovies(genreCache[genre]);
+    showToast(`Showing cached ${genre} movies`, "info");
+    return;
+  }
+
+  showToast(`Loading top ${genre} movies...`, "info");
+  resultsDiv.innerHTML = '<div class="loading-spinner"></div>';
+
+  try {
+    // First fetch popular movies
+    const response = await fetch(`https://www.omdbapi.com/?s=movie&type=movie&page=1&apikey=${API_KEY}`);
+    const data = await response.json();
+
+    if (data.Response !== "True") {
+      resultsDiv.innerHTML = `<p class="error-message">Couldn't load ${genre} movies</p>`;
+      showToast(`Failed to load ${genre} movies`, "error");
+      return;
+    }
+
+    // Get detailed info and filter by genre
+    const detailedMovies = await getDetailedMovies(data.Search);
+    const genreKeywords = GENRE_MAPPING[genre] || [genre];
+    
+    const filteredMovies = detailedMovies.filter(movie => {
+      if (!movie.Genre) return false;
+      const movieGenres = movie.Genre.toLowerCase().split(", ");
+      return genreKeywords.some(keyword => 
+        movieGenres.some(g => g.includes(keyword))
+      );
+    }).sort((a, b) => {
+      return (parseFloat(b.imdbRating) || 0) - (parseFloat(a.imdbRating) || 0);
+    }).slice(0, 12); // Limit to top 12
+
+    if (filteredMovies.length > 0) {
+      // Cache results
+      genreCache[genre] = filteredMovies;
+      localStorage.setItem("genreCache", JSON.stringify(genreCache));
+      
+      displayMovies(filteredMovies);
+      showToast(`Showing top ${filteredMovies.length} ${genre} movies`, "success");
+    } else {
+      resultsDiv.innerHTML = `<p class="error-message">No ${genre} movies found</p>`;
+      showToast(`No ${genre} movies found`, "warning");
+    }
+  } catch (error) {
+    console.error("Genre load error:", error);
+    resultsDiv.innerHTML = `<p class="error-message">Failed to load ${genre} movies</p>`;
+    showToast(`Failed to load ${genre} movies`, "error");
+  }
+}
+
+// Helper Functions
+async function getDetailedMovies(movies) {
+  const detailedRequests = movies.map(movie => 
+    fetch(`https://www.omdbapi.com/?i=${movie.imdbID}&apikey=${API_KEY}`)
+      .then(res => res.json())
+      .catch(() => null) // Handle individual failures
+  );
+  
+  const detailedResults = await Promise.all(detailedRequests);
+  return detailedResults.filter(movie => movie && movie.Response === "True");
+}
+
+function clearStaleCache() {
+  const today = new Date().toDateString();
+  const lastCleared = localStorage.getItem("lastCacheClear");
+  
+  if (lastCleared !== today) {
+    localStorage.removeItem("genreCache");
+    localStorage.removeItem("searchCache");
+    localStorage.setItem("lastCacheClear", today);
+    genreCache = {};
+    searchCache = {};
+  }
+}
+
+// Display Functions
+function displayMovies(movies) {
+  if (!movies || movies.length === 0) {
+    resultsDiv.innerHTML = `<p class="error-message">No movies found</p>`;
+    return;
+  }
+
+  resultsDiv.innerHTML = movies.map(movie => `
+    <div class="movie-card" data-id="${movie.imdbID}">
+      <img src="${movie.Poster !== "N/A" ? movie.Poster : "https://via.placeholder.com/200x300?text=No+Poster"}" 
+           alt="${movie.Title}"
+           onerror="this.src='https://via.placeholder.com/200x300?text=No+Poster'">
+      <div class="movie-info">
+        <h3>${movie.Title}</h3>
+        <p>${movie.Year} • ${movie.Runtime || "N/A"}</p>
+        ${movie.imdbRating ? `<p><span class="rating">⭐ ${movie.imdbRating}</span></p>` : ""}
+        <button class="bookmark-btn" data-id="${movie.imdbID}">
+          ${isBookmarked(movie.imdbID) ? "★ Bookmarked" : "☆ Bookmark"}
+        </button>
+      </div>
+    </div>
+  `).join("");
+
+  // Add event listeners
   document.querySelectorAll(".movie-card").forEach(card => {
     card.addEventListener("click", (e) => {
       if (!e.target.classList.contains("bookmark-btn")) {
-        const imdbID = card.getAttribute("data-id");
-        showMovieDetails(imdbID);
+        showMovieDetails(card.dataset.id);
       }
     });
   });
 
-  // Add bookmark event listeners
   document.querySelectorAll(".bookmark-btn").forEach(btn => {
-    btn.addEventListener("click", (e) => {
+    btn.addEventListener("click", async (e) => {
       e.stopPropagation();
-      const movieId = e.target.getAttribute("data-id");
+      const movieId = e.target.dataset.id;
       const movie = movies.find(m => m.imdbID === movieId);
-      addBookmark(movie);
+      
+      if (isBookmarked(movieId)) {
+        removeBookmark(movieId);
+      } else {
+        addBookmark(movie);
+      }
     });
   });
 }
 
 // Bookmark Functions
 function addBookmark(movie) {
-  let bookmarks = JSON.parse(localStorage.getItem("bookmarks")) || [];
-  if (!bookmarks.some(m => m.imdbID === movie.imdbID)) {
-    movie.justAdded = true; // Flag for animation
-    bookmarks.push(movie);
-    localStorage.setItem("bookmarks", JSON.stringify(bookmarks));
-    showToast(`✓ ${movie.Title} bookmarked!`, 'success');
+  if (!movie) return;
+  
+  if (!isBookmarked(movie.imdbID)) {
+    bookmarkCache.push(movie);
+    localStorage.setItem("bookmarks", JSON.stringify(bookmarkCache));
+    showToast(`"${movie.Title}" bookmarked`, "success");
     loadBookmarks();
-  } else {
-    showToast(`⚠ Already bookmarked!`, 'warning');
+    
+    // Update bookmark button state
+    const btn = document.querySelector(`.bookmark-btn[data-id="${movie.imdbID}"]`);
+    if (btn) btn.textContent = "★ Bookmarked";
+  }
+}
+
+function removeBookmark(imdbID) {
+  const movie = bookmarkCache.find(m => m.imdbID === imdbID);
+  if (movie) {
+    bookmarkCache = bookmarkCache.filter(m => m.imdbID !== imdbID);
+    localStorage.setItem("bookmarks", JSON.stringify(bookmarkCache));
+    showToast(`"${movie.Title}" removed`, "error");
+    loadBookmarks();
+    
+    // Update bookmark button state
+    const btn = document.querySelector(`.bookmark-btn[data-id="${imdbID}"]`);
+    if (btn) btn.textContent = "☆ Bookmark";
   }
 }
 
 function loadBookmarks() {
-  const bookmarks = JSON.parse(localStorage.getItem("bookmarks")) || [];
+  bookmarkCache = JSON.parse(localStorage.getItem("bookmarks")) || [];
   
-  bookmarksList.innerHTML = bookmarks
-    .map(movie => `
-      <div class="movie-card ${movie.justAdded ? 'new-bookmark' : ''}" data-id="${movie.imdbID}">
-        <img src="${movie.Poster !== "N/A" ? movie.Poster : "https://via.placeholder.com/200x300?text=No+Poster"}" alt="${movie.Title}">
+  if (bookmarkCache.length === 0) {
+    bookmarksList.innerHTML = `<p class="empty-message">No bookmarks yet</p>`;
+    return;
+  }
+
+  bookmarksList.innerHTML = bookmarkCache.map(movie => `
+    <div class="movie-card" data-id="${movie.imdbID}">
+      <img src="${movie.Poster !== "N/A" ? movie.Poster : "https://via.placeholder.com/200x300?text=No+Poster"}" 
+           alt="${movie.Title}"
+           onerror="this.src='https://via.placeholder.com/200x300?text=No+Poster'">
+      <div class="movie-info">
         <h3>${movie.Title}</h3>
-        <p>Year: ${movie.Year}</p>
+        <p>${movie.Year}</p>
         <button class="remove-btn" data-id="${movie.imdbID}">Remove</button>
       </div>
-    `)
-    .join('');
+    </div>
+  `).join("");
 
-  // Remove animation class after it plays
-  setTimeout(() => {
-    document.querySelectorAll('.new-bookmark').forEach(el => {
-      el.classList.remove('new-bookmark');
-    });
-    
-    // Clear the justAdded flags
-    const updatedBookmarks = bookmarks.map(m => ({ ...m, justAdded: false }));
-    localStorage.setItem("bookmarks", JSON.stringify(updatedBookmarks));
-  }, 500);
-
-  // Make bookmarked movies clickable
+  // Add event listeners
   document.querySelectorAll("#bookmarks-list .movie-card").forEach(card => {
     card.addEventListener("click", (e) => {
       if (!e.target.classList.contains("remove-btn")) {
-        const imdbID = card.getAttribute("data-id");
-        showMovieDetails(imdbID);
+        showMovieDetails(card.dataset.id);
       }
     });
   });
 
-  // Add event listeners to remove buttons
   document.querySelectorAll(".remove-btn").forEach(btn => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      const imdbID = e.target.getAttribute("data-id");
-      removeBookmark(imdbID);
+      removeBookmark(btn.dataset.id);
     });
   });
 }
 
-// Remove Bookmark Function
-function removeBookmark(imdbID) {
-  let bookmarks = JSON.parse(localStorage.getItem("bookmarks")) || [];
-  const movie = bookmarks.find(m => m.imdbID === imdbID);
-  bookmarks = bookmarks.filter(m => m.imdbID !== imdbID);
-  localStorage.setItem("bookmarks", JSON.stringify(bookmarks));
-  showToast(`🗑 ${movie.Title} removed`, 'error');
-  loadBookmarks();
+function isBookmarked(imdbID) {
+  return bookmarkCache.some(movie => movie.imdbID === imdbID);
 }
 
-// Close modal when clicking X
-closeModal.addEventListener("click", () => {
-  movieModal.style.display = "none";
-});
+// Movie Details Modal
+async function showMovieDetails(imdbID) {
+  try {
+    const movie = await fetch(`https://www.omdbapi.com/?i=${imdbID}&apikey=${API_KEY}`)
+      .then(res => res.json());
+    
+    if (movie.Response !== "True") throw new Error("No movie data");
 
-// Close modal when clicking outside
-window.addEventListener("click", (e) => {
-  if (e.target === movieModal) {
-    movieModal.style.display = "none";
+    modalDetails.innerHTML = `
+      <div class="movie-details">
+        <img src="${movie.Poster !== "N/A" ? movie.Poster : "https://via.placeholder.com/300x450?text=No+Poster"}" 
+             alt="${movie.Title}"
+             onerror="this.src='https://via.placeholder.com/300x450?text=No+Poster'">
+        <div>
+          <h2>${movie.Title} (${movie.Year})</h2>
+          <p><strong>Genre:</strong> ${movie.Genre || "N/A"}</p>
+          <p><strong>Director:</strong> ${movie.Director || "N/A"}</p>
+          <p><strong>Actors:</strong> ${movie.Actors || "N/A"}</p>
+          <p><strong>Plot:</strong> ${movie.Plot || "N/A"}</p>
+          <p><strong>Rating:</strong> ${movie.imdbRating || "N/A"}/10 (${movie.imdbVotes || "N/A"} votes)</p>
+          <button class="bookmark-btn" data-id="${movie.imdbID}">
+            ${isBookmarked(movie.imdbID) ? "★ Remove Bookmark" : "☆ Add Bookmark"}
+          </button>
+        </div>
+      </div>
+    `;
+
+    // Add bookmark button in modal
+    modalDetails.querySelector(".bookmark-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (isBookmarked(movie.imdbID)) {
+        removeBookmark(movie.imdbID);
+      } else {
+        addBookmark(movie);
+      }
+      movieModal.style.display = "none"; // Close modal after action
+    });
+
+    movieModal.style.display = "block";
+  } catch (error) {
+    console.error("Error showing details:", error);
+    showToast("Failed to load movie details", "error");
   }
-});
+}
 
-// Toast notification function
-function showToast(message, type = 'success') {
-  const toast = document.getElementById('toast');
+// Toast Notification
+function showToast(message, type = "info") {
+  const toast = document.getElementById("toast");
   toast.textContent = message;
-  toast.className = 'toast show ' + type;
+  toast.className = `toast show ${type}`;
   
-  setTimeout(() => {
-    toast.classList.remove('show');
-  }, 3000); // Auto-hide after 3 seconds
+  // Clear previous timeout if exists
+  if (toast.timeoutId) clearTimeout(toast.timeoutId);
+  
+  toast.timeoutId = setTimeout(() => {
+    toast.classList.remove("show");
+  }, 3000);
 }
