@@ -550,3 +550,58 @@ body {
     padding: 1rem;
   }
 }
+
+/* ===== LOGIN BACKGROUND ===== */
+#login-section {
+  background: 
+    linear-gradient(rgba(0, 0, 0, 0.329), rgba(0, 0, 0, 0.185)),
+    url("https://cdn.drop.media/guest/422f4b44-ddfe-4873-bda2-60984114210c.png") no-repeat center center;
+  background-size: cover;
+}
+
+/* ===== LOGO STYLES ===== */
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.logo {
+  height: 40px;
+  width: auto;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.3));
+}
+
+/* Adjust header title to accommodate logo */
+.app-header h1 {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+/* ===== Movie Results Background ===== */
+#results {
+  position: relative; /* Needed for z-index */
+  min-height: 500px; /* Ensure space for background */
+}
+
+#results::before {
+  content: "";
+  position: fixed; /* Fixed positioning */
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    linear-gradient(rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0.85)), /* Dark overlay */
+    url('https://cdn.drop.media/guest/422f4b44-ddfe-4873-bda2-60984114210c.png') no-repeat center center;
+  background-size: cover;
+  z-index: -1; /* Place behind content */
+  opacity: 0.8; /* Adjust transparency */
+  pointer-events: none; /* Allow clicking through */
+}
+
+/* Make movie cards semi-transparent */
+.movie-card {
+  background-color: rgba(255, 255, 255, 0.9); /* 90% opaque white */
+  backdrop-filter: blur(2px); /* Frosted glass effect */
+}
