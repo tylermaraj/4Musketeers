@@ -162,57 +162,67 @@ async function searchMovies() {
 
 // Genre Functions
 async function loadGenreMovies(genre) {
-  // Check cache first
-  if (genreCache[genre]) {
-    displayMovies(genreCache[genre]);
-    showToast(`Showing cached ${genre} movies`, "info");
-    return;
-  }
-
-  showToast(`Loading top ${genre} movies...`, "info");
+  showToast(`Loading ${genre} movies...`, "info");
   resultsDiv.innerHTML = '<div class="loading-spinner"></div>';
 
   try {
-    // First fetch popular movies
-    const response = await fetch(`https://www.omdbapi.com/?s=movie&type=movie&page=1&apikey=${API_KEY}`);
-    const data = await response.json();
-
-    if (data.Response !== "True") {
-      resultsDiv.innerHTML = `<p class="error-message">Couldn't load ${genre} movies</p>`;
-      showToast(`Failed to load ${genre} movies`, "error");
-      return;
-    }
-
-    // Get detailed info and filter by genre
-    const detailedMovies = await getDetailedMovies(data.Search);
-    const genreKeywords = GENRE_MAPPING[genre] || [genre];
+    // 1. Fetch multiple pages to get enough results
+    const searchTerms = {
+      action: "action",
+      comedy: "comedy",
+      drama: "drama",
+      horror: "horror",
+      "sci-fi": "sci-fi",
+      animation: "animated"
+    };
     
-    const filteredMovies = detailedMovies.filter(movie => {
-      if (!movie.Genre) return false;
-      const movieGenres = movie.Genre.toLowerCase().split(", ");
-      return genreKeywords.some(keyword => 
-        movieGenres.some(g => g.includes(keyword))
-      );
-    }).sort((a, b) => {
-      return (parseFloat(b.imdbRating) || 0) - (parseFloat(a.imdbRating) || 0);
-    }).slice(0, 12); // Limit to top 12
+    const query = searchTerms[genre] || genre;
+    const movies = await getMoreMovies(query);
 
-    if (filteredMovies.length > 0) {
-      // Cache results
-      genreCache[genre] = filteredMovies;
-      localStorage.setItem("genreCache", JSON.stringify(genreCache));
-      
-      displayMovies(filteredMovies);
-      showToast(`Showing top ${filteredMovies.length} ${genre} movies`, "success");
+    // 2. Get detailed info (parallel requests)
+    const detailedMovies = await getDetailedMovies(movies);
+    
+    // 3. Filter with lenient fallback
+    let filteredMovies = detailedMovies.filter(movie => {
+      if (!movie.Genre) return true; // Keep if no genre data
+      return movie.Genre.toLowerCase().includes(genre);
+    });
+    
+    // 4. Ensure exactly 12 results
+    if (filteredMovies.length < 12) {
+      const needed = 12 - filteredMovies.length;
+      const fallbackMovies = detailedMovies
+        .filter(m => !filteredMovies.includes(m))
+        .slice(0, needed);
+      filteredMovies = [...filteredMovies, ...fallbackMovies];
     } else {
-      resultsDiv.innerHTML = `<p class="error-message">No ${genre} movies found</p>`;
-      showToast(`No ${genre} movies found`, "warning");
+      filteredMovies = filteredMovies.slice(0, 12);
     }
+
+    displayMovies(filteredMovies);
+    showToast(`Showing 12 ${genre} movies`, "success");
+    
   } catch (error) {
-    console.error("Genre load error:", error);
-    resultsDiv.innerHTML = `<p class="error-message">Failed to load ${genre} movies</p>`;
-    showToast(`Failed to load ${genre} movies`, "error");
+    console.error("Error:", error);
+    resultsDiv.innerHTML = `<p class="error-message">Failed to load movies</p>`;
+    showToast("Network error", "error");
   }
+}
+
+// Helper function to get enough movies
+async function getMoreMovies(query) {
+  const responses = await Promise.all([
+    fetch(`https://www.omdbapi.com/?s=${query}&type=movie&page=1&apikey=${API_KEY}`),
+    fetch(`https://www.omdbapi.com/?s=${query}&type=movie&page=2&apikey=${API_KEY}`)
+  ]);
+  
+  const data = await Promise.all(responses.map(r => r.json()));
+  const allMovies = data.flatMap(d => d.Search || []);
+  
+  // Remove duplicates and return 12
+  return [...new Map(
+    allMovies.map(movie => [movie.imdbID, movie])
+  ).values()].slice(0, 12);
 }
 
 // Helper Functions
